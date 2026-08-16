@@ -1,6 +1,6 @@
 # Kube Pyramid
 
-**Identify the .**
+**Identify the real priority of your k8s applications - with data**
 
 Kubernetes gives you two static, absolute knobs for saying *"this workload
 is important"* — the pod's QoS class, and its PriorityClass integer. Both
