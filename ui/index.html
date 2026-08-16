@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Kube Pyramid</title>
+<style>
+  :root{
+    --bg:#f5f7f9; --surface:#ffffff; --surface2:#fafbfc; --border:#e4e7eb; --border2:#d3d8de;
+    --text:#1b2430; --muted:#657084; --faint:#8a93a3;
+    --accent:#2563eb; --accent-bg:#eaf1fe; --accent-br:#c5d9fb;
+    --green:#127a4a; --green-bg:#e7f6ee; --green-br:#bfe6d0;
+    --amber:#8a5a06; --amber-bg:#fbf1dd; --amber-br:#ecd8a8;
+    --red:#b02a2a; --red-bg:#fbeeee; --red-br:#e6c3c3;
+    --purple:#5b46c4; --purple-bg:#eeeafb; --topbar:#0f2436; --radius:8px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .topbar{background:var(--topbar);color:#fff;height:52px;display:flex;align-items:center;padding:0 20px;gap:10px}
+  .topbar .logo{width:26px;height:26px;border-radius:6px;background:#2563eb;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px}
+  .topbar h1{font-size:15px;font-weight:500;margin:0}
+  .topbar .env{margin-left:auto;font-size:12px;color:#9fb0c2;display:flex;align-items:center;gap:6px}
+  .dot{width:8px;height:8px;border-radius:50%;background:#3ddc84;display:inline-block}
+  .modebar{display:flex;align-items:center;gap:12px;padding:11px 24px;background:var(--surface2);border-bottom:1px solid var(--border)}
+  .seg{display:inline-flex;border:1px solid var(--border2);border-radius:22px;overflow:hidden}
+  .seg-btn{border:none;background:var(--surface);color:var(--muted);padding:7px 16px;font-size:13px;cursor:pointer}
+  .seg-btn.active{background:var(--accent);color:#fff}
+  .steps{display:flex;gap:6px;padding:14px 24px;background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .step{display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;font-size:13px;user-select:none}
+  .step .n{width:20px;height:20px;border-radius:50%;background:#eef1f4;color:var(--muted);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600}
+  .step.active{border-color:var(--accent-br);background:var(--accent-bg);color:var(--accent)}
+  .step.active .n{background:var(--accent);color:#fff}
+  .step.done .n{background:var(--green);color:#fff}
+  .sep{color:var(--faint);align-self:center}
+  main{max-width:1080px;margin:0 auto;padding:26px 24px 60px}
+  .screen{display:none} .screen.show{display:block}
+  h2{font-size:20px;font-weight:600;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 22px;font-size:13.5px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px}
+  .grid{display:grid;gap:16px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  label.f{display:block;font-size:12.5px;color:var(--muted);margin:0 0 5px}
+  input[type=text],input[type=url],input[type=password],input[type=number],select,textarea{
+    width:100%;height:36px;border:1px solid var(--border2);border-radius:var(--radius);padding:0 11px;font-size:13.5px;background:var(--surface);color:var(--text)}
+  textarea{height:auto;padding:9px 11px;resize:vertical;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+  .btn{height:36px;padding:0 16px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--surface);color:var(--text);font-size:13.5px;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+  .btn:hover{background:var(--surface2)} .btn:disabled{opacity:.5;cursor:default}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.ghost{border-color:transparent;color:var(--accent);padding:0 8px}
+  .btn.sm{height:30px;font-size:12.5px;padding:0 12px}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;padding:3px 9px;border-radius:20px;font-weight:500}
+  .pill.blue{background:var(--accent-bg);color:var(--accent)} .pill.green{background:var(--green-bg);color:var(--green)}
+  .pill.amber{background:var(--amber-bg);color:var(--amber)} .pill.gray{background:#eef1f4;color:var(--muted)}
+  .muted{color:var(--muted)} .small{font-size:12.5px}
+  .row{display:flex;align-items:center;gap:10px}
+  .between{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .hint{background:#f0f5fb;border:1px solid #dbe6f4;border-radius:var(--radius);padding:9px 12px;font-size:12.5px;color:#3a5675;display:flex;gap:8px;align-items:flex-start}
+  .err{background:var(--red-bg);border:1px solid var(--red-br);color:var(--red);border-radius:var(--radius);padding:9px 12px;font-size:12.5px;margin:10px 0;display:none}
+  .tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+  .tab{padding:7px 13px;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface);font-size:12.5px;cursor:pointer;color:var(--muted)}
+  .tab.active{border-color:var(--accent-br);background:var(--accent-bg);color:var(--accent)}
+  .btn.danger{color:var(--red)}
+  #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--topbar);color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:60}
+  #toast.show{opacity:1}
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;font-size:13px;padding:9px 10px;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-weight:500;font-size:12px}
+  .tree-ns{border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .ns-row{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--border)}
+  .dep{padding:9px 14px 9px 44px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;font-size:13px}
+  .spin{width:15px;height:15px;border:2px solid #c9d3df;border-top-color:var(--accent);border-radius:50%;display:inline-block;animation:sp .7s linear infinite;vertical-align:-3px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .rstep{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:13.5px}
+  .srccard{border:1px solid var(--border);border-radius:10px;padding:13px 15px;display:flex;gap:12px;align-items:flex-start;cursor:pointer;background:var(--surface)}
+  .srccard.on{border-color:var(--accent-br);background:var(--accent-bg)}
+  .srccard .ic{width:30px;height:30px;border-radius:7px;background:#eef1f4;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;color:var(--muted)}
+  .srccard.on .ic{background:var(--accent);color:#fff}
+  .weightrow{display:flex;align-items:center;gap:12px;padding:8px 0}
+  .weightrow input[type=range]{flex:1}
+  .weightrow .wv{width:38px;text-align:right;font-variant-numeric:tabular-nums;font-size:13px}
+  .qos{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;padding:3px 9px;border-radius:6px;font-weight:600}
+  .qos.Guaranteed{background:var(--green-bg);color:var(--green);border:1px solid var(--green-br)}
+  .qos.Burstable{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-br)}
+  .qos.BestEffort{background:var(--red-bg);color:var(--red);border:1px solid var(--red-br)}
+  .grp{border:1px solid var(--border);border-radius:12px;margin-bottom:18px;overflow:hidden}
+  .grphead{display:flex;align-items:center;gap:12px;padding:13px 16px;background:var(--surface2);border-bottom:1px solid var(--border)}
+  .grphead .gname{font-weight:600;font-size:14.5px}
+  .arrow{color:var(--faint)}
+  .change{font-size:11px;padding:2px 7px;border-radius:6px;font-weight:600}
+  .change.raise{background:var(--green-bg);color:var(--green)} .change.lower{background:var(--red-bg);color:var(--red)} .change.unchanged{background:#eef1f4;color:var(--muted)}
+  .prio{font-variant-numeric:tabular-nums;font-weight:600} .prcell{white-space:nowrap}
+  .bar{height:7px;border-radius:4px;background:#eef1f4;overflow:hidden;min-width:90px}
+  .bar > i{display:block;height:100%;background:var(--accent)}
+  .overlay{position:fixed;inset:0;background:rgba(15,28,45,.5);display:none;align-items:center;justify-content:center;padding:24px;z-index:50}
+  .overlay.show{display:flex}
+  .modal{background:var(--surface);border-radius:14px;width:100%;max-width:600px;max-height:88vh;overflow:auto;padding:22px 24px}
+  .modal.lg{max-width:760px}
+  .modal h3{margin:0;font-size:17px;font-weight:600}
+  .modal .x{margin-left:auto;border:none;background:none;font-size:20px;color:var(--faint);cursor:pointer;line-height:1}
+  .evidence{background:#f0f5fb;border:1px solid #dbe6f4;border-radius:var(--radius);padding:11px 13px;font-size:13px;color:#33475f;margin:12px 0}
+  .pctrow{display:flex;align-items:center;gap:12px;margin:8px 0;font-size:13px}
+  .pctrow .rn{width:130px;color:var(--muted)} .pctrow .bar{flex:1} .pctrow .pv{width:44px;text-align:right;font-variant-numeric:tabular-nums}
+  .peer{border:1px solid var(--border);border-radius:10px;padding:11px 14px;margin-top:10px;display:flex;align-items:center;gap:12px}
+  footer.note{color:var(--faint);font-size:12px;text-align:center;padding:14px}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="logo">KP</div>
+  <h1>Kube Pyramid</h1>
+  <div class="env"><span class="dot"></span> read-only · never applies to the cluster</div>
+</div>
+
+<div class="modebar">
+  <span class="small muted">Comparison scope</span>
+  <div class="seg" id="modeseg">
+    <button class="seg-btn active" data-m="within" onclick="setMode('within')">Within similar-app groups</button>
+    <button class="seg-btn" data-m="cross" onclick="setMode('cross')">Across all groups</button>
+  </div>
+  <span class="small muted" id="modehint" style="margin-left:auto">Rank apps only against their k-means peers (recommended)</span>
+</div>
+
+<nav class="steps" id="steps">
+  <div class="step active" data-s="1"><span class="n">1</span> Connect cluster</div><span class="sep">›</span>
+  <div class="step" data-s="2"><span class="n">2</span> Select workloads</div><span class="sep">›</span>
+  <div class="step" data-s="3"><span class="n">3</span> Data sources &amp; run</div><span class="sep">›</span>
+  <div class="step" data-s="4"><span class="n">4</span> Recommendations</div>
+</nav>
+
+<main>
+  <div class="err" id="err"></div>
+
+  <!-- SCREEN 1 -->
+  <section class="screen show" id="s1">
+    <div class="between">
+      <div><h2 style="margin:0">Connect a Kubernetes cluster</h2>
+      <p class="sub" style="margin:4px 0 0">The tool runs outside your cluster (read-only). Pick a cluster to analyze, or add one.</p></div>
+      <button class="btn primary" onclick="openM('m-cluster')">+ Add cluster</button>
+    </div>
+    <div class="grid" id="clusters" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr));margin-top:20px"></div>
+    <div class="hint" style="margin-top:18px"><span>🔒</span><span>Least-privilege: the tool only needs <b>read</b> (list/get) on namespaces, deployments, pods and nodes. Credentials are stored as a k8s Secret reference only — never the raw kubeconfig/token.</span></div>
+  </section>
+
+  <!-- SCREEN 2 -->
+  <section class="screen" id="s2">
+    <h2>Select workloads</h2>
+    <p class="sub">Namespaces / workloads already discovered for this cluster. Allocations, utilization and interactions are analyzed for these.</p>
+    <div class="between" style="margin-bottom:12px"><span class="pill gray" id="wlcount">—</span></div>
+    <div class="tree-ns" id="tree"></div>
+    <div class="row" style="justify-content:space-between;margin-top:18px">
+      <button class="btn" onclick="go(1)">← Back</button>
+      <button class="btn primary" onclick="go(3)">Continue →</button>
+    </div>
+  </section>
+
+  <!-- SCREEN 3 -->
+  <section class="screen" id="s3">
+    <h2>Data sources &amp; run</h2>
+    <p class="sub">Confirm sources, tune weights, then run. Runs <span class="small">POST /collections → POST /runs</span>; collection failure is non-fatal (stale flagged).</p>
+    <div class="card" style="margin-bottom:16px">
+      <div class="between" style="margin-bottom:10px"><b>Interaction source</b></div>
+      <div class="grid2">
+        <div class="srccard on" data-src="hubble" onclick="pickSrc(this)"><div class="ic">CI</div><div><b>Cilium / Hubble</b><div class="small muted">default</div></div></div>
+        <div class="srccard" data-src="istio" onclick="pickSrc(this)"><div class="ic">IS</div><div><b>Istio</b><div class="small muted">istio_requests_total</div></div></div>
+        <div class="srccard" data-src="otel" onclick="pickSrc(this)"><div class="ic">OT</div><div><b>OpenTelemetry</b><div class="small muted">service-graph spans</div></div></div>
+      </div>
+    </div>
+    <div class="grid2" style="margin-bottom:16px">
+      <div class="card">
+        <b>Run settings</b>
+        <div style="margin-top:12px"><label class="f">Utilization window</label>
+          <select id="win"><option value="1h">Last 1 hour</option><option value="7d">7 days</option><option value="14d">14 days</option><option value="30d">30 days</option></select></div>
+        <div style="margin-top:10px"><label class="f">Cluster count (k)</label>
+          <select id="ksel"><option value="">Auto (silhouette)</option><option value="2">Fixed: 2</option><option value="3">Fixed: 3</option><option value="4">Fixed: 4</option></select></div>
+        <div style="margin-top:10px"><label class="row small"><input type="checkbox" id="costck"> Cost estimate (needs node price / OpenCost)</label></div>
+        <div id="costwrap" style="margin-top:8px;display:none"><label class="f">Node $/hr</label><input type="number" id="nodecost" value="0.10" step="0.01"></div>
+      </div>
+      <div class="card">
+        <div class="between"><b>Resource weights</b><button class="btn ghost sm" onclick="resetW()">reset equal</button></div>
+        <div class="small muted" style="margin:2px 0 8px">How much each resource counts toward the ranking.</div>
+        <div id="weights"></div>
+      </div>
+    </div>
+    <div class="card"><div class="between">
+      <div class="small muted">Analysis runs on the collected data for this cluster.</div>
+      <button class="btn primary" id="runbtn" onclick="runFlow()">Collect &amp; generate ▶</button>
+    </div><div id="runsteps" style="display:none;margin-top:14px"></div></div>
+    <div class="row" style="margin-top:16px"><button class="btn" onclick="go(2)">← Back</button></div>
+  </section>
+
+  <!-- SCREEN 4 -->
+  <section class="screen" id="s4">
+    <div class="between" style="margin-bottom:6px">
+      <h2 style="margin:0">Recommendations</h2>
+      <div class="row">
+        <span class="pill gray" id="scopepill">within-group ranking</span>
+        <span class="pill blue" id="freshpill"></span>
+        <label class="small muted">Sort</label>
+        <select id="sortsel" style="height:30px;width:auto;padding:0 8px" onchange="sortBy=this.value;renderResults()">
+          <option value="rank">Rank — highest first</option><option value="name">Workload name (A–Z)</option><option value="change">Biggest change first</option>
+        </select>
+        <button class="btn sm" onclick="openExport('all')">⤓ Export all YAML</button>
+      </div>
+    </div>
+    <p class="sub" id="s4sub">Nothing is applied — review and export what you choose.</p>
+    <div id="results"></div>
+    <div class="row" style="margin-top:8px"><button class="btn" onclick="go(3)">← Adjust &amp; re-run</button></div>
+  </section>
+</main>
+
+<footer class="note">Kube Pyramid · reads /api/v1 · nothing is applied to any cluster.</footer>
+
+<div class="overlay" id="whyModal"><div class="modal lg">
+  <div class="row" style="align-items:flex-start"><h3 id="whyTitle">Why?</h3><button class="x" onclick="close_('whyModal')">×</button></div>
+  <div class="evidence" id="whyEvidence"></div>
+  <b class="small muted">Per-resource percentile within group</b><div id="whyPct" style="margin-top:8px"></div>
+  <div id="whyPeers" style="margin-top:16px"></div>
+</div></div>
+
+<div class="overlay" id="expModal"><div class="modal">
+  <div class="row"><h3 id="expTitle">Export YAML</h3><button class="x" onclick="close_('expModal')">×</button></div>
+  <div class="hint" style="margin:12px 0">Only the <b>PriorityClass</b> is an active change. QoS-class edits are <b>comments</b> — review and apply yourself.</div>
+  <textarea id="expBody" rows="16"></textarea>
+  <div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn" onclick="close_('expModal')">Close</button><button class="btn primary" onclick="copyExport()">Copy</button></div>
+</div></div>
+
+<!-- ADD CLUSTER modal (mirrors the Job Recommender connect flow) -->
+<div class="overlay" id="m-cluster"><div class="modal">
+  <div class="row" style="margin-bottom:16px"><h3>Add Kubernetes cluster</h3><button class="x" onclick="close_('m-cluster')">×</button></div>
+  <label class="f">Cluster name</label><input id="cl-name" type="text" placeholder="prod-eng-services" style="margin-bottom:14px">
+  <label class="f">Authentication method</label>
+  <div class="tabs" id="authtabs">
+    <div class="tab active" data-a="kubeconfig" onclick="pickAuth('kubeconfig')">Kubeconfig</div>
+    <div class="tab" data-a="token" onclick="pickAuth('token')">SA token</div>
+    <div class="tab" data-a="client_cert" onclick="pickAuth('client_cert')">Client cert</div>
+    <div class="tab" data-a="basic" onclick="pickAuth('basic')">Basic auth</div>
+  </div>
+  <div id="auth-kubeconfig" class="authpane">
+    <div class="hint" style="margin-bottom:12px"><span>ⓘ</span><span>Most common for external tools. Reference an uploaded kubeconfig Secret.</span></div>
+    <label class="f">Context</label><input id="cl-ctx" type="text" placeholder="prod-eng-services" style="margin-bottom:12px">
+    <label class="f">Credential reference (k8s Secret name)</label><input id="cl-ref-kc" type="text" placeholder="kubeconfig-prod">
+  </div>
+  <div id="auth-token" class="authpane" style="display:none">
+    <label class="f">API server URL</label><input id="cl-url-tok" type="url" placeholder="https://10.20.0.1:6443" style="margin-bottom:12px">
+    <label class="f">Credential reference (Secret holding the bearer token)</label><input id="cl-ref-tok" type="text" placeholder="sa-token-prod">
+  </div>
+  <div id="auth-client_cert" class="authpane" style="display:none">
+    <label class="f">API server URL</label><input id="cl-url-crt" type="url" placeholder="https://10.20.0.1:6443" style="margin-bottom:12px">
+    <label class="f">Credential reference (Secret holding cert + key)</label><input id="cl-ref-crt" type="text" placeholder="client-cert-prod">
+  </div>
+  <div id="auth-basic" class="authpane" style="display:none">
+    <label class="f">API server URL</label><input id="cl-url-bsc" type="url" placeholder="https://127.0.0.1:6443" style="margin-bottom:12px">
+    <label class="f">Credential reference (Secret holding user/pass)</label><input id="cl-ref-bsc" type="text" placeholder="basic-auth-prod">
+    <div class="hint" style="margin-top:12px"><span>⚠</span><span>Legacy — most clusters disable basic auth. Prefer kubeconfig or a token.</span></div>
+  </div>
+  <div class="row" style="gap:10px;margin-top:20px">
+    <button class="btn" onclick="testConnection()">🔌 Test connection</button>
+    <button class="btn" style="margin-left:auto" onclick="saveCluster(false)">Save cluster</button>
+    <button class="btn primary" onclick="saveCluster(true)">Save &amp; continue</button>
+  </div>
+</div></div>
+
+<div id="toast"></div>
+
+<script>
+const API = (window.KUBEPYRAMID_API || '/api/v1');
+const RES = [["cpu","CPU"],["memory","Memory"],["interactions","Interactions"]];
+let weights = {cpu:33, memory:33, interactions:34};
+let mode = "within", sortBy = "rank", intSource = "hubble";
+const state = {clusterId:null, clusterName:null, runId:null, groups:[], run:null};
+
+async function api(path, opts){
+  const r = await fetch(API + path, Object.assign({headers:{'Content-Type':'application/json'}}, opts||{}));
+  if(!r.ok){ const t = await r.text(); throw new Error(r.status + ' ' + t); }
+  const ct = r.headers.get('content-type')||''; return ct.includes('json') ? r.json() : r.text();
+}
+function showErr(m){ const e=document.getElementById('err'); e.textContent=m; e.style.display='block'; setTimeout(()=>e.style.display='none', 6000); }
+
+function go(n){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('show'));
+  document.getElementById('s'+n).classList.add('show');
+  document.querySelectorAll('.step').forEach(st=>{const s=+st.dataset.s;st.classList.toggle('active',s===n);st.classList.toggle('done',s<n);});
+  window.scrollTo(0,0);}
+document.querySelectorAll('.step').forEach(st=>st.addEventListener('click',()=>go(+st.dataset.s)));
+
+function setMode(m){mode=m;document.querySelectorAll('#modeseg .seg-btn').forEach(b=>b.classList.toggle('active',b.dataset.m===m));
+  document.getElementById('modehint').textContent = m==='within'
+    ? "Rank apps only against their k-means peers (recommended)"
+    : "Merge groups; rank on utilization÷allocation fraction so small hot apps outrank big idle ones";
+  document.getElementById('scopepill').textContent = m==='within'?"within-group ranking":"cross-group (fraction) ranking";
+  if(document.getElementById('s4').classList.contains('show') && state.runId) runFlow(); }
+
+// ---- screen 1: connect cluster (card grid + add-cluster modal) ----
+function openM(id){ document.getElementById(id).classList.add('show'); }
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2600); }
+function pickAuth(m){
+  document.querySelectorAll('#authtabs .tab').forEach(t=>t.classList.toggle('active', t.dataset.a===m));
+  ['kubeconfig','token','client_cert','basic'].forEach(a=>{ document.getElementById('auth-'+a).style.display = a===m?'block':'none'; });
+}
+async function loadClusters(){
+  let clusters=[];
+  try{ clusters=(await api('/clusters')).clusters; }
+  catch(e){ showErr('API unreachable at '+API+' — '+e.message); return; }
+  const grid=document.getElementById('clusters'); grid.innerHTML='';
+  const pillCls = s => s === 'reachable' ? 'green' : s === 'unreachable' ? 'amber' : 'gray';
+  clusters.forEach(c=>{
+    const card=document.createElement('div'); card.className='card';
+    card.innerHTML=`<div class="row" style="margin-bottom:10px"><span class="pill ${pillCls(c.status)}">● ${c.status||'added'}</span><b>${c.name}</b></div>
+      <div class="small muted">${c.api_url||'—'} · ${c.auth_method||'n/a'}</div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn sm primary" data-sel="${c.id}" data-name="${c.name}">Select →</button>
+        <button class="btn sm" data-test="${c.id}">Test</button>
+        <button class="btn ghost sm danger" data-del="${c.id}" style="margin-left:auto">Remove</button>
+      </div>`;
+    grid.appendChild(card);
+  });
+  const add=document.createElement('div');
+  add.className='card'; add.style.cssText='border-style:dashed;display:flex;align-items:center;justify-content:center;color:var(--muted);cursor:pointer;min-height:96px';
+  add.textContent='+ Add cluster'; add.onclick=()=>openM('m-cluster');
+  grid.appendChild(add);
+  grid.querySelectorAll('[data-sel]').forEach(b=>b.onclick=()=>selectCluster(b.dataset.sel,b.dataset.name));
+  grid.querySelectorAll('[data-test]').forEach(b=>b.onclick=()=>testCluster(b.dataset.test));
+  grid.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>deleteCluster(b.dataset.del));
+}
+async function selectCluster(id,name){ state.clusterId=id; state.clusterName=name; await loadWorkloads(); go(2); }
+function probeMsg(r){ return r.reachable
+  ? `✓ Reachable${r.server_version?' · '+r.server_version:''}${r.detail?' — '+r.detail:''}`
+  : `✗ Unreachable: ${r.detail||'unknown error'}`; }
+async function testCluster(id){
+  toast('Testing connection…');
+  try{ const r = await api('/clusters/'+id+':test',{method:'POST'}); toast(probeMsg(r)); loadClusters(); }
+  catch(e){ toast('Test failed: '+e.message); }
+}
+async function testConnection(){
+  const method=document.querySelector('#authtabs .tab.active').dataset.a;
+  const urlId={token:'cl-url-tok',client_cert:'cl-url-crt',basic:'cl-url-bsc'}[method];
+  const refId={kubeconfig:'cl-ref-kc',token:'cl-ref-tok',client_cert:'cl-ref-crt',basic:'cl-ref-bsc'}[method];
+  const apiUrl = urlId ? (document.getElementById(urlId).value.trim()||null) : null;
+  const credRef = document.getElementById(refId).value.trim()||null;
+  if(!apiUrl && !credRef){ toast('Enter an API URL and/or a credential reference first.'); return; }
+  toast('Testing connection…');
+  try{ const r = await api('/clusters:test',{method:'POST',body:JSON.stringify({auth_method:method, api_url:apiUrl, credential_ref:credRef})}); toast(probeMsg(r)); }
+  catch(e){ toast('Test failed: '+e.message); }
+}
+async function deleteCluster(id){
+  try{ await api('/clusters/'+id,{method:'DELETE'}); if(state.clusterId===id) state.clusterId=null; toast('Cluster removed'); loadClusters(); }
+  catch(e){ toast(e.message); }
+}
+async function saveCluster(cont){
+  const name=document.getElementById('cl-name').value.trim();
+  if(!name){ toast('Cluster name is required'); return; }
+  const method=document.querySelector('#authtabs .tab.active').dataset.a;
+  const urlId={token:'cl-url-tok',client_cert:'cl-url-crt',basic:'cl-url-bsc'}[method];
+  const refId={kubeconfig:'cl-ref-kc',token:'cl-ref-tok',client_cert:'cl-ref-crt',basic:'cl-ref-bsc'}[method];
+  const body={name, auth_method:method,
+    api_url: urlId ? (document.getElementById(urlId).value.trim()||null) : null,
+    credential_ref: document.getElementById(refId).value.trim()||null};
+  try{
+    const created=await api('/clusters',{method:'POST',body:JSON.stringify(body)});
+    toast('Cluster “'+name+'” added'); close_('m-cluster'); document.getElementById('cl-name').value='';
+    await loadClusters();
+    if(cont) selectCluster(created.id,name);
+  }catch(e){ toast('Add failed: '+e.message); }
+}
+
+// ---- screen 2 ----
+async function loadWorkloads(){
+  const t = document.getElementById('tree'); t.innerHTML=''; let total=0;
+  try{
+    const ns = (await api(`/clusters/${state.clusterId}/namespaces`)).namespaces;
+    for(const n of ns){
+      const wls = (await api(`/clusters/${state.clusterId}/namespaces/${n.name}/workloads`)).workloads;
+      if(!wls.length) continue;
+      total += wls.length;
+      const row=document.createElement('div'); row.className='ns-row';
+      row.innerHTML=`<input type="checkbox" class="ns-check" checked onclick="toggleNs('${n.name}',this.checked)"><b>${n.name}</b><span class="pill gray small">${wls.length}</span>`;
+      t.appendChild(row);
+      wls.forEach(w=>{const d=document.createElement('div');d.className='dep';
+        d.innerHTML=`<input type="checkbox" class="wl-check" data-uid="${w.workload_uid}" data-ns="${n.name}" checked onchange="updateSelCount()"><span>${w.name}</span><span class="small muted">${w.kind}${w.current_qos?' · currently '+w.current_qos:''}</span>`;
+        t.appendChild(d);});
+    }
+    if(total===0){ t.innerHTML='<div class="dep muted">No collected workloads yet — run the collector first.</div>'; }
+  }catch(e){ showErr(e.message); }
+  updateSelCount();
+}
+function toggleNs(ns, on){ document.querySelectorAll(`.wl-check[data-ns="${ns}"]`).forEach(c=>c.checked=on); updateSelCount(); }
+function selectedUids(){ return [...document.querySelectorAll('.wl-check:checked')].map(c=>c.dataset.uid).filter(Boolean); }
+function updateSelCount(){ const sel=selectedUids().length, all=document.querySelectorAll('.wl-check').length;
+  const el=document.getElementById('wlcount'); if(el) el.textContent = `${sel} of ${all} workloads selected`; }
+
+// ---- screen 3 ----
+function weightsUI(){const w=document.getElementById('weights');w.innerHTML='';
+  RES.forEach(([k,label])=>{const r=document.createElement('div');r.className='weightrow';
+    r.innerHTML=`<span class="small" style="width:96px">${label}</span><input type="range" min="0" max="100" value="${weights[k]}" oninput="weights['${k}']=+this.value;this.nextElementSibling.textContent=this.value"><span class="wv">${weights[k]}</span>`;
+    w.appendChild(r);});}
+function resetW(){weights={cpu:33,memory:33,interactions:34};weightsUI();}
+function pickSrc(el){document.querySelectorAll('.srccard').forEach(c=>c.classList.remove('on'));el.classList.add('on');intSource=el.dataset.src;}
+document.getElementById('costck').addEventListener('change',e=>{document.getElementById('costwrap').style.display=e.target.checked?'block':'none';});
+
+async function runFlow(){
+  const box=document.getElementById('runsteps'); box.style.display='block'; box.innerHTML='';
+  document.getElementById('runbtn').disabled=true;
+  const step=(t)=>{const d=document.createElement('div');d.className='rstep';d.innerHTML=`<span class="spin"></span> ${t}`;box.appendChild(d);return d;};
+  const done=(d)=>{d.innerHTML=d.innerHTML.replace(/<span class="spin"><\/span>/,'<span style="color:var(--green)">✓</span>');};
+  try{
+    const win=document.getElementById('win').value;
+    // 1. collection (non-fatal)
+    const d1=step('Collecting (metrics + allocations + interactions)…');
+    try{ await api('/collections',{method:'POST',body:JSON.stringify({cluster:state.clusterName,window:win,interaction_source:intSource})}); }
+    catch(e){ d1.innerHTML=`<span style="color:var(--amber)">!</span> Collection skipped (${e.message.slice(0,40)}…) — using stored data`; }
+    done(d1);
+    // 2. run
+    const d2=step('Clustering + ranking → priority + QoS…');
+    const k=document.getElementById('ksel').value; const cost=document.getElementById('costck').checked;
+    const cfg={comparison_scope: mode==='within'?'within_group':'cross_group', window:win, weights,
+               outputs:{cost}, node_hourly_cost: cost?+document.getElementById('nodecost').value:0};
+    if(win==='1h') cfg.resample_freq='2min';   // match the collector's fine step for short windows
+    const sel=selectedUids(), all=document.querySelectorAll('.wl-check').length;
+    if(all>0 && sel.length===0){ showErr('Select at least one workload on step 2.'); document.getElementById('runbtn').disabled=false; return; }
+    const scope = (sel.length && sel.length<all) ? {workload_uids: sel} : 'all';
+    const res=await api('/runs',{method:'POST',body:JSON.stringify({cluster:state.clusterName, k:k?+k:null, scope, config:cfg})});
+    state.runId=res.run_id; done(d2);
+    await loadResults(); go(4);
+  }catch(e){ showErr(e.message); }
+  finally{ document.getElementById('runbtn').disabled=false; }
+}
+
+// ---- screen 4 ----
+async function loadResults(){
+  const d = await api(`/runs/${state.runId}/groups`); state.groups=d.groups; state.run=d.run;
+  document.getElementById('freshpill').textContent = d.run.stale ? 'stale data' : 'fresh';
+  document.getElementById('s4sub').textContent = mode==='within'
+    ? `${d.groups.length} similar-app group(s). Nothing is applied — review and export.`
+    : 'All workloads ranked together on utilization ÷ allocation fraction.';
+  renderResults();
+}
+function sortApps(arr){const c=[...arr];
+  if(sortBy==='name') c.sort((a,b)=>(a.workload||'').localeCompare(b.workload||''));
+  else if(sortBy==='change') c.sort((a,b)=>Math.abs((b.recommended_priority_int||0)-(b.current_priority||0))-Math.abs((a.recommended_priority_int||0)-(a.current_priority||0)));
+  else c.sort((a,b)=>(b.weighted_score||0)-(a.weighted_score||0));
+  return c;}
+const cap={rank:"ranked by weighted score ↓",name:"sorted A–Z",change:"biggest change first"};
+function renderResults(){const box=document.getElementById('results');box.innerHTML='';
+  state.groups.forEach((g,gi)=>{
+    const apps=sortApps(g.recommendations);
+    const rows=apps.map((a,ai)=>{
+      // QoS: show "current → recommended" only when a current class is known, else just recommended.
+      const recQ=`<span class="qos ${a.recommended_qos}">${a.recommended_qos}</span>`;
+      const qosCell = a.current_qos
+        ? `<span class="qos ${a.current_qos}">${a.current_qos}</span> <span class="arrow">→</span> ${recQ}`
+        : recQ;
+      // Recommended priority: show the transition + change badge only when a current integer is set.
+      const recP=`<span class="prio">${a.recommended_priority_int}</span>`;
+      const badge=`<span class="change ${a.change}">${a.change==='raise'?'▲ raise':a.change==='lower'?'▼ lower':'unchanged'}</span>`;
+      const prioCell = (a.current_priority!=null)
+        ? `<span class="prio">${a.current_priority}</span> <span class="muted">→</span> ${recP} ${badge}`
+        : recP;
+      return `<tr>
+        <td><b>${a.workload||a.workload_uid}</b><div class="small muted">${a.namespace||''}</div></td>
+        <td>${qosCell}</td>
+        <td class="prcell">${prioCell}</td>
+        <td><div class="bar"><i style="width:${Math.round((a.weighted_score||0)*100)}%"></i></div></td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="btn sm" onclick="openWhy('${a.recommendation_id}')">Why?</button>
+          <button class="btn sm" onclick="openExport('workload','${a.workload_uid}')">YAML</button></td></tr>`;}).join('');
+    const el=document.createElement('div');el.className='grp';
+    el.innerHTML=`<div class="grphead"><span class="gname">${g.label||('Group '+g.group_index)}</span><span class="pill gray">${apps.length} apps</span>
+        <span class="small muted" style="margin-left:auto">${cap[sortBy]}</span></div>
+      <div style="padding:4px 8px"><table><thead><tr><th>Workload</th><th>QoS</th><th>Recommended Priority</th><th>Score</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    box.appendChild(el);});
+}
+
+// ---- modals ----
+async function openWhy(recId){
+  try{
+    const e=await api(`/runs/${state.runId}/recommendations/${recId}/evidence?series=false`);
+    const conf=e.confidence, cc=conf==='high'?'var(--green)':conf==='medium'?'var(--amber)':'var(--muted)';
+    document.getElementById('whyTitle').innerHTML=`Why? <span style="font-weight:500;font-size:14px;color:${cc}">(confidence: ${conf})</span>`;
+    document.getElementById('whyEvidence').textContent=e.summary||'';
+    const pr=[...e.per_resource]; if(e.interaction_sum!=null) pr.push({resource:'interactions',percentile:null,representative_value:e.interaction_sum});
+    document.getElementById('whyPct').innerHTML=pr.map(p=>{const v=p.percentile==null?null:Math.round(p.percentile);
+      return `<div class="pctrow"><span class="rn">${p.resource}</span><div class="bar"><i style="width:${v==null?0:v}%"></i></div><span class="pv">${v==null?('Σ '+Math.round(p.representative_value)):v+'%'}</span></div>`;}).join('');
+    const peers=e.peers&&e.peers.length
+      ? `<b class="small muted">Interacting peers</b>`+e.peers.map(p=>`<div class="peer"><b>${p.peer_workload}</b><span class="small muted">${p.relation}</span><span class="pill blue" style="margin-left:auto">affinity ${p.affinity}</span></div>`).join('')
+      : `<div class="small muted">No interacting peers in this group.</div>`;
+    document.getElementById('whyPeers').innerHTML=peers;
+    document.getElementById('whyModal').classList.add('show');
+  }catch(err){ showErr(err.message); }
+}
+async function openExport(scope, uid){
+  try{
+    const q = scope==='all' ? 'scope=all' : `scope=workload&uid=${encodeURIComponent(uid)}`;
+    const y = await api(`/runs/${state.runId}/export?${q}`);
+    document.getElementById('expTitle').textContent = scope==='all'?'Export all recommendations':'Export: '+uid;
+    document.getElementById('expBody').value = y;
+    document.getElementById('expModal').classList.add('show');
+  }catch(err){ showErr(err.message); }
+}
+function copyExport(){const t=document.getElementById('expBody');t.select();document.execCommand('copy');}
+function close_(id){document.getElementById(id).classList.remove('show');}
+document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('show');}));
+
+// init
+weightsUI(); loadClusters();
+</script>
+</body>
+</html>
