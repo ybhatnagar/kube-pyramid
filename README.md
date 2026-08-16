@@ -1,188 +1,239 @@
 # Kube Pyramid
 
-_Auto QoS / Priority-Class Recommender for Kubernetes._
+**Stop the priority paradox in your Kubernetes cluster.**
 
-An open-source tool that analyzes a Kubernetes cluster's **allocated resources,
-historical utilization, and inter-pod interactions** and recommends a *relative*
-**PriorityClass integer** and **QoS class** (Guaranteed / Burstable / BestEffort) for
-every workload — so admins can fix mis-set priorities that cause over-provisioning and
-starvation of critical apps. **Recommend-only: the tool never mutates the cluster.**
+Kubernetes gives you two static, absolute knobs for saying *"this workload
+is important"* — the pod's QoS class, and its PriorityClass integer. Both
+are set at deploy time, in isolation, by whoever wrote the YAML. So they all
+end up at the top of the pyramid: Guaranteed, priority 1,000,000, please
+don't evict me. Everyone gold-tier, nobody willing to be preempted, half
+your cluster idle. Kube Pyramid *looks* at your cluster and *tells* you
+which workloads have been quietly hoarding priority they don't need — and
+which under-appreciated workloads deserve a promotion. Named for the
+QoS pyramid every k8s cluster forms: Guaranteed at the top, then Burstable,
+then Best-Effort.
 
-Design docs live in [`docs/`](docs/) (`CLAUDE.md` + `docs/01`–`08`). This is a
-**standalone repo** that vendors (copies + adapts) the sibling Job Recommender's Go
-collector and Python `analysis_core`, and adds a new QoS recommender head. It runs
-**fully independently** of the Job Recommender: its own code copy, its own state DB
-(`./kubepyramid.db`, `KUBEPYRAMID_*` env), its own `qos_*` result tables.
+Kube Pyramid reads your existing data (Prometheus, kube-state-metrics,
+optionally Cilium/Hubble or Istio) and gives you two kinds of advice per
+workload:
 
-## Status — Milestone 5 complete (packaging + deploy)
+1. **QoS class** — _"Your `payments-idle` deployment is Guaranteed with a
+   priority of 1,000,000, but its median CPU is 0.3% of what you asked for
+   and it never spikes. Recommend BestEffort at priority 333."_
+2. **PriorityClass integer** — _"Compared to its peers in the same allocation
+   cluster, `payments-hot` is under-prioritized (Burstable, priority 100).
+   It's the top-percentile CPU and memory consumer of the group. Recommend
+   Guaranteed at priority 1000."_
 
-All five milestones are built and tested: the state-DB schema, the full `recommenders/qos`
-engine (silhouette clustering, ranking/assignment, cross-cluster fraction mode, confidence,
-optional cost, template "Why"), the Go data collector (allocations from KSM incl. custom
-resources, arbitrary-resource utilization, hubble/istio/otel interaction sources), the
-`/api/v1` REST surface + YAML export, the 4-step UI wizard, **and the deployment artifacts**
-— small images (distroless Go collector, slim Python engine+API, nginx UI) and the
-`deploy/helm/kubepyramid` Helm chart (postgres + migrate hook + collector CronJob/trigger-service
-+ engine-API + UI + RBAC). **Validated live** on a 3-node Docker Desktop cluster: helm install →
-migrate → collect from real Prometheus → the engine recovered both allocation groups and ranked
-`*-hot/warm/idle → Guaranteed/Burstable/BestEffort`, served through the UI's `/api` proxy. (Plus
-`helm lint`/`template` + `docker build`.) Nothing reads or writes anything outside this repo.
+**It never touches your cluster.** Read-only credentials, no mutating
+admission webhooks, no operator. And when you export the recommendations
+to YAML, only the safe knob (`priorityClassName`) is an active edit — the
+QoS-class change is rendered as *commented* guidance, because changing QoS
+means rewriting `requests`/`limits` and that can OOM-kill your app.
+
+<p align="center">
+  <img src="docs/images/hero-recommendations.png" alt="Recommendations screen showing two allocation groups with current→recommended transitions" width="820">
+</p>
+
+## Two recommendations, one pipeline
+
+Kube Pyramid runs a single algorithm that groups peers by allocation, ranks
+within each peer group by utilization + interactions, and then reads out
+the same rank order two ways: as a QoS class and as a PriorityClass integer.
+Both are the same score-proportional value; they just materialize in
+different corners of Kubernetes (kubelet vs scheduler).
+
+The pipeline is deliberately small — a Phase A that clusters on the
+N-dimensional allocation vector (with the log-then-standardize scaling and
+a silhouette k-selection), and a Phase B that scores per-workload
+percentile-rank across cpu, memory, and interactions, weighted per resource.
+No LLM, no black boxes, every threshold config-driven.
+
+### QoS class
+
+For each workload, given its rank position within its allocation cluster:
+
+- Top third of the group → **Guaranteed** (this app should be the last to be
+  killed under node pressure).
+- Middle third → **Burstable** (has a floor, can grow to a ceiling).
+- Bottom third → **BestEffort** (first to be evicted; keeps the pyramid
+  standing).
+
+The split percentages are configurable, but equal thirds is the honest
+default — it turns "everyone is Guaranteed" into a distribution that
+reflects reality.
+
+**Example output:**
 
 ```
-$ cd engine && kubepyramid-engine run --synthetic --k 2
-
-run gentle-quokka-2510 (id=1) — completed; 12 recommendations; stale=False
-
-■ group 0: allocation: cpu 4.00, memory 8.00Gi, +nvidia.com/gpu  (6 apps)
-  workload               rec QoS       prio  score  current     conf
-  serving-6              Guaranteed    1000   1.00  Guaranteed  high
-  serving-5              Guaranteed     833   0.83  Guaranteed  high
-  serving-4              Burstable      667   0.67  Guaranteed  high
-  serving-3              Burstable      500   0.50  Guaranteed  high
-  serving-2              BestEffort     333   0.33  Guaranteed  high
-  serving-1              BestEffort     167   0.17  Guaranteed  high
-■ group 1: allocation: cpu 0.25, memory 256Mi  (6 apps)
-  batch-6 … batch-1  (same 1000→167 / Guaranteed→BestEffort pattern)
+serving-idle   Guaranteed(1000000)  →  BestEffort           lower ▼
+   "Ranked #6 of 6 vs its allocation cluster (score 0.33); over-provisioned."
+serving-hot    Burstable(100)       →  Guaranteed           raise ▲
+   "Ranked #1 of 6 vs its allocation cluster (score 1.00); top-percentile CPU + memory."
 ```
 
-Every app starts deployed `Guaranteed` (the "priority paradox"); the tool ranks each
-group and demotes the lower-ranked apps.
+### PriorityClass integer
 
-## Repo layout
+From the same score: `priority = base + step × weighted_score`, clamped
+below k8s's reserved system band. Defaults `base=0, step=1000`, so a score
+of 1.0 → 1000 and 0.33 → 333. The relative delta is preserved: an app
+scoring twice another gets exactly twice the priority integer.
+
+**Example output:**
+
 ```
-collector/   # Go — VENDORED from Job Recommender (renamed jobrec→kubepyramid), extended for QoS
-  internal/connectors/prometheus/   # metrics + allocations (KSM) + interaction sources
-  internal/steps/                   # metrics.go, allocations.go, interactions step
-  internal/store/migrations/{sqlite,postgres}/
-    0001_init.sql   # vendored base schema, verbatim
-    0002_qos.sql    # ADDITIVE: allocations + qos_* tables + run_type + current-state cols
-    0003_freetext_and_interactions.sql  # metric_samples free-text; data_sources += interactions
-engine/      # Python — core engine
-  engine/analysis_core/   # VENDORED: io/statestore, prepare, interaction_graph, types, config
-  engine/recommenders/qos/
-    cluster.py         # Phase A — effective-allocation feature build → log-standardize → k-means
-    representative.py  # Phase B.1–2 — median utilization + interaction sum
-    ranking.py         # Phase B.3–5 — percentile rank + weighted aggregate
-    assign.py          # Phase B.6–7 — score-proportional priority + equal-thirds QoS
-    runner.py          # orchestrates the above; reads DB, writes Tier-4 results
-    types.py           # QoS DTOs
-    export.py          # YAML export renderer (docs/08 safety model)
-  engine/synth/        # QoS synthetic generator (k separable clusters, designed rank order)
-  engine/api/          # FastAPI /api/v1 (app.py) + DTO builders (dto.py)
-  engine/{runner,cli,collector}.py
-  tests/
-ui/index.html          # 4-step wizard (static; calls /api/v1); served via KUBEPYRAMID_UI_DIR
-docs/  CLAUDE.md  README.md
+serving-hot     100  →  1000    ▲ raise      (Burstable → Guaranteed)
+serving-warm    500  →   667    unchanged    (still Burstable)
+serving-idle 1000000 →   333    ▼ lower      (Guaranteed → BestEffort)
 ```
 
-## Algorithm (docs/01, docs/05)
-- **Phase A — Cluster Generator:** k-means over each workload's *allocated-resource*
-  vector (effective allocation = `requested ?? limit ?? max-util ?? 0`), after
-  **log-then-standardize** scaling. `k` is auto-selected by a **silhouette sweep**
-  (`k_min..k_max`), with a heuristic/fixed fallback for degenerate inputs. Ranking is
-  always *within a cluster*.
-- **Phase B — Priority Generation (per cluster):** representative value = **median**
-  utilization per resource; interactions as a pseudo-resource = **sum** of the app's
-  interaction counts; **percentile rank** per resource; **weighted aggregate** (equal
-  weights by default); sort → within-group importance order; **PriorityClass integer**
-  = `base + step·score` (score 0..1), clamped; **QoS class** = equal thirds
-  (Guaranteed / Burstable / BestEffort).
-- **Cross-cluster mode** (`--scope cross_group`): merge all workloads and rank on the
-  **utilization/allocation fraction** `x/y` — a small app running hot outranks a big app
-  idling.
-- **Confidence** (high/medium/low) from utilization coverage, distance to a QoS-third
-  boundary, and whether allocations were real vs a max-util fallback.
-- **Cost** (optional): monthly $ of the unused reservation for over-provisioned
-  gold-tier apps recommended for demotion — null unless a node price / OpenCost is set.
-- **"Why"**: deterministic per-recommendation templates + a downsampled per-resource
-  series stored in evidence (LLM hook scaffolded, off).
+Applied actively in the YAML export (see [safe-YAML export](docs/priority-ranking.md#safe-yaml-export)) —
+this is the only knob Kube Pyramid actually edits on `kubectl apply`.
 
-All thresholds/weights are config-driven (`EngineConfig`, defaults from the DB
-`settings` row, per-run overrides via CLI/API).
+<p align="center">
+  <img src="docs/images/hero-safe-export.png" alt="Export YAML modal showing an active PriorityClass patch and commented QoS-class guidance" width="820">
+</p>
 
-## Run / test locally (no cluster needed)
+## Try it in 5 minutes (no cluster needed)
+
+The engine ships a synthetic-cluster generator, so you can go from zero to
+recommendations without a Kubernetes cluster or a Prometheus:
+
 ```bash
-# Engine (Python) — runs entirely on the synthetic generator
+# Engine — install
 cd engine
 python3 -m venv .venv && ./.venv/bin/pip install -e ".[dev]"
-./.venv/bin/pytest                                       # unit + e2e tests
-./.venv/bin/kubepyramid-engine run --synthetic --k auto       # silhouette k-selection, human table
-./.venv/bin/kubepyramid-engine run --synthetic --scope cross_group          # fraction mode
-./.venv/bin/kubepyramid-engine run --synthetic --cost --node-hourly-cost 0.10   # + savings
-./.venv/bin/kubepyramid-engine run --synthetic --k 2 --json   # machine-readable
 
-# API + UI — serve /api/v1 and the wizard from the same origin
-cd engine
-KUBEPYRAMID_UI_DIR=../ui ./.venv/bin/kubepyramid-engine serve --port 8000 --db-dsn ./kubepyramid.db
-#   → API at http://localhost:8000/api/v1, UI at http://localhost:8000/
-#   POST /runs → GET /runs/{id}/groups | /recommendations/{id}/evidence | /export
+# 1) generate a synthetic cluster and rank against it (12 workloads, 2 groups)
+./.venv/bin/kubepyramid-engine run --synthetic --k 2 --db-dsn ./demo.db
 
-# Collector (Go) — connectors, steps, store, migrations
-cd collector && go test ./...
-# Real ingest from a Prometheus endpoint into the state DB (CronJob/Job entrypoint):
-#   collector ingest --all --prom-url http://prometheus.monitoring:9090 \
-#       --interaction-source hubble --resources cpu,memory --db-dsn ./kubepyramid.db
-# then: kubepyramid-engine run --cluster default --db-dsn ./kubepyramid.db
+# 2) same data, but rank cross-group on util/allocation fraction
+./.venv/bin/kubepyramid-engine run --synthetic --scope cross_group --db-dsn ./demo.db
+
+# 3) serve the API + UI, then walk the wizard at http://localhost:8000/
+KUBEPYRAMID_UI_DIR=../ui ./.venv/bin/kubepyramid-engine serve \
+    --db-dsn ./demo.db --port 8000
 ```
-Each repo uses its **own venv**; the QoS engine and the Job Recommender engine share the
-package name `engine` but never the same environment or database.
 
-## Deploy to a cluster (Helm)
-Small images (distroless Go collector, slim Python engine+API, nginx UI) + the
-`deploy/helm/kubepyramid` chart (bundled demo Postgres, a migrate hook, the collector CronJob +
-on-demand trigger service, engine-API, UI, read-only RBAC). Quickstart on kind + kube-
-prometheus-stack (Cilium optional — needed only for interaction edges):
+Detailed walkthrough: [**docs/quickstart.md**](docs/quickstart.md).
+
+## Deploy to Kubernetes
+
+Per-module images and a Helm chart that runs the collector CronJob, engine
++ API, UI, and an optional bundled Postgres:
+
 ```bash
-# 1. build + load images into kind
-for m in collector engine ui; do docker build -t kubepyramid/$m:0.1.0 ./$m; done
-kind create cluster --name qos
-for m in collector engine ui; do kind load docker-image kubepyramid/$m:0.1.0 --name qos; done
-
-# 2. metrics stack (kube-state-metrics + cAdvisor via Prometheus)
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm install kps prometheus-community/kube-prometheus-stack -n monitoring --create-namespace \
-  -f deploy/demo/kube-prometheus-stack-values.yaml
-
-# 3. the recommender + a synthetic workload set to analyze
-helm install qr deploy/helm/kubepyramid -n qos --create-namespace \
-  --set collector.promUrl=http://kps-kube-prometheus-stack-prometheus.monitoring:9090
-kubectl apply -f deploy/demo/synthetic-workloads.yaml
-
-# 4. collect now, then open the UI (or GET the API)
-kubectl -n qos create job --from=cronjob/qr-kubepyramid-collector collect-now
-kubectl -n qos port-forward svc/qr-kubepyramid-ui 8080:80     # → http://localhost:8080/
+docker build -t kubepyramid/collector:0.1.0 collector/
+docker build -t kubepyramid/engine:0.1.0    engine/
+docker build -t kubepyramid/ui:0.1.0        ui/
+helm install kp deploy/helm/kubepyramid -n kubepyramid --create-namespace \
+  --set collector.promUrl=http://prometheus.monitoring:9090
+kubectl -n kubepyramid port-forward svc/kp-kubepyramid-ui 8080:80
+# open http://localhost:8080/
 ```
-The synthetic set has two allocation groups (serving/large, batch/small) with graded CPU
-utilization, so the run should recover both groups and rank `*-hot → Guaranteed`,
-`*-warm → Burstable`, `*-idle → BestEffort`. See [`deploy/README.md`](deploy/README.md).
 
-## State DB (this repo's own DB — never shared)
-Four tiers behind a `StateStore` interface (PostgreSQL prod, SQLite dev). QoS additions
-are **purely additive** over the vendored base (new `allocations` + `qos_groups` /
-`qos_recommendations` / `qos_evidence` / `qos_peers` tables, a `run_type` discriminator
-defaulting to `qos`, and nullable current-state columns) — no vendored table's data or
-constraints are rewritten. Full contract: [`docs/04-schema-and-api.md`](docs/04-schema-and-api.md).
+Full guide (external DB, ingress, kind/minikube demo, RBAC): [**docs/deployment.md**](docs/deployment.md).
 
-### Schema evolution (migrations)
-`0001_init` is the Job-Recommender base vendored **verbatim**; `0002_qos` adds the QoS
-layer additively (new `allocations` + `qos_*` tables, `run_type`, nullable columns);
-`0003_freetext_and_interactions` completes the two relaxations that were deferred through
-M1–M2 (now that the collector ingests arbitrary/custom-resource utilization and an
-`interactions` data source): `metric_samples.resource` → free-text, and
-`data_sources.type` gains `'interactions'`. On Postgres these are one-line constraint
-edits; SQLite (which can't alter a CHECK in place) rebuilds the two tables — a no-op copy
-on a fresh DB.
+## Prerequisites
 
-## Roadmap
-- **M1 ✓** — thin end-to-end on synthetic data (schema, clustering, ranking, assignment).
-- **M2 ✓** — silhouette k-selection, cross-cluster fraction mode, confidence scoring,
-  optional cost head, template-based "Why", expanded edge-case fixtures.
-- **M3 ✓** — collector: `allocations` step (KSM, incl. extended/custom resources),
-  arbitrary-resource utilization (completed the deferred `metric_samples` relaxation),
-  `InteractionSource` registry (hubble/istio/otel), real collector→engine handoff.
-- **M4 ✓** — `/api/v1` (`run_type='qos'`): clusters/discovery/data_sources/collections/
-  runs/groups/recommendations/evidence/**export**; 4-step UI wizard with Why + Export YAML.
-- **M5 ✓** — small images (distroless collector, slim engine+API, nginx UI) + the
-  `deploy/helm/kubepyramid` Helm chart (postgres, migrate hook, collector CronJob + trigger
-  service, engine-API, UI, RBAC); demo synthetic-workloads manifest + kube-prometheus-stack
-  values. `helm lint`/`template` + `docker build` validated; kind quickstart below.
+- **Go ≥ 1.23** (to build the collector) and **Python ≥ 3.9** (to run the engine).
+- No Kubernetes cluster is needed to try it — the engine ships a synthetic
+  generator and uses SQLite by default. Postgres is supported for production.
+
+## Deeper reading
+
+- [**Quickstart**](docs/quickstart.md) — the 5-minute walk-through, with the
+  synthetic → analyze → serve → API loop.
+- [**Deployment guide**](docs/deployment.md) — Helm chart, kind/minikube demo,
+  ingress, external Postgres, RBAC.
+- [**Architecture**](docs/architecture.md) — the three modules, the shared
+  analysis core, the state-DB contract, and how the collector fits in.
+- [**Priority ranking deep dive**](docs/priority-ranking.md) — Phase A / Phase
+  B, cross-group mode, confidence scoring, and the safe-YAML export model.
+- [**REST API reference**](docs/api.md) — full `/api/v1` surface with DTOs.
+- [**Contributing**](docs/contributing.md) — how to run tests, layout a
+  change, and the contracts you must not break.
+
+Original design discussions the repo was built from: [`design-docs/`](design-docs/)
+(numbered 01–08).
+
+<details>
+<summary><b>REST API — quick reference</b></summary>
+
+Base path `/api/v1` (served by `kubepyramid-engine serve`):
+
+| Method | Path | What it does |
+|---|---|---|
+| `POST` | `/runs` | Start a run: `{cluster, scope, config?, k?, ttl?}` → `{run_id, name, status}` |
+| `GET`  | `/runs` | Run history (each entry surfaces `run_type`) |
+| `GET`  | `/runs/{id}` | Run status + freshness (`data_as_of`, `stale`) |
+| `GET`  | `/runs/{id}/groups` | Allocation groups + nested recommendations |
+| `GET`  | `/runs/{id}/recommendations` | Flat recommendation cards |
+| `GET`  | `/runs/{id}/recommendations/{recId}/evidence` | The "why": per-resource percentiles + peers. `?series=false` for text only |
+| `GET`  | `/runs/{id}/export` | YAML export: `scope=all` or `scope=workload&uid=<uid>` |
+| `GET/POST/DELETE` | `/clusters`, `/clusters/{id}` | Manage connected clusters |
+| `POST` | `/clusters:test`, `/clusters/{id}:test` | Live cluster connectivity probe (kubeconfig / SA token / client cert / basic auth) |
+| `GET`  | `/clusters/{id}/namespaces`, `.../workloads` | Browse discovered workloads |
+| `GET/POST/PUT/DELETE` | `/clusters/{id}/data_sources`, `/data_sources/{id}` | Manage metric sources |
+| `GET/PUT` | `/settings` | Default thresholds and data-retention windows |
+| `POST/GET` | `/collections`, `/collections/{id}` | Trigger + poll on-demand collection |
+
+Full reference with DTOs, request bodies, and error shapes: [**docs/api.md**](docs/api.md).
+
+</details>
+
+## Status
+
+**Working today** (verified end-to-end on a local 3-node Docker Desktop cluster):
+
+- Collector's Prometheus path — `allocations` (KSM incl. extended/custom
+  resources like `nvidia.com/gpu`), arbitrary-resource utilization, and
+  interactions from a **swappable source** (Hubble / Istio / OTel behind
+  the same registry).
+- The full ranking pipeline: log-then-standardize scaling, silhouette
+  k-selection with a fixed-k fallback, k-means clustering, median +
+  interaction-sum representative, percentile rank, weighted aggregate,
+  QoS-third assignment, score-proportional priority integer.
+- Cross-group utilization/allocation-fraction mode.
+- Confidence scoring (coverage + boundary + allocation-realness).
+- Optional cost estimate (per-workload monthly $, plus null when disabled).
+- Deterministic per-recommendation "why" + downsampled per-resource
+  utilization series.
+- Docs/08 safe YAML export: active PriorityClass + commented QoS guidance
+  sized from observed P50/P95, memory-peak floored.
+- Full `/api/v1` REST surface + FastAPI-generated OpenAPI docs.
+- A static UI wizard with per-workload checkboxes, weight sliders, live
+  connectivity probe on the Add-cluster modal, "Why?" evidence + peer
+  panels, and single-workload or bulk YAML export.
+- Container images + a Helm chart for Kubernetes (bundled demo Postgres or
+  external DB, RBAC, optional Ingress).
+
+**Not built yet:**
+
+- Live discovery refresh — querying a connected cluster's Kubernetes API to
+  list namespaces/workloads on demand (the stubbed `?refresh=true` path).
+  Discovery through the collector's cache works today.
+- Native Hubble-Relay gRPC interaction source. Hubble metrics scraped via
+  Prometheus work today; a direct gRPC path is on the roadmap.
+- Direct k8s-API allocations for resources KSM doesn't surface. KSM covers
+  standard + extended resources today; a fallback path for exotic vendor
+  resources is on the roadmap.
+- Weighted-QoS split calibration by cluster / team / cost budget. Equal
+  thirds is the default; smarter splits are on the roadmap.
+
+## Contributing
+
+Bug reports and PRs welcome — see [**docs/contributing.md**](docs/contributing.md)
+for the mechanics. Two things to keep an eye on:
+
+- **Tests stay green.** Engine: `cd engine && ./.venv/bin/pytest`. Collector:
+  `cd collector && go test ./...`.
+- **Contracts.** The database schema is the only cross-module contract — see
+  `collector/internal/store/migrations/`. `/api/v1` DTOs are the other
+  contract; keep them stable.
+
+## License
+
+MIT — see [`LICENSE`](LICENSE). Permissive: commercial use, private forks,
+SaaS hosting, and academic/research use are all allowed. Downstream users
+must keep the copyright notice and the license text.
