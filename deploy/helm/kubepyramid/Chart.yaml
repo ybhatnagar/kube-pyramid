@@ -1,0 +1,19 @@
+apiVersion: v2
+name: kubepyramid
+description: >-
+  Kube Pyramid — a scheduled collector (CronJob), the engine + REST API, and an
+  optional web UI. Analyzes allocated resources, utilization and inter-pod interactions and recommends a
+  relative PriorityClass integer + QoS class per workload. Never mutates the target cluster.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - kubernetes
+  - qos
+  - priorityclass
+  - cost-optimization
+  - scheduling
+sources:
+  - https://example.com/kube-pyramid
+maintainers:
+  - name: Yash Bhatnagar
