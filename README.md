@@ -10,8 +10,8 @@ don't evict me", meaning your cluster needs more resources and hence costs.
 
 Kube Pyramid *looks* at your cluster and *tells* you
 which workloads have been quietly hoarding priority they don't need — and
-which under-appreciated workloads deserve a promotion. Named for the
-QoS pyramid every k8s cluster forms: Guaranteed at the top, then Burstable,
+which under-appreciated workloads deserve a promotion. Named after pyramid,
+representing application importance: Guaranteed at the top, then Burstable,
 then Best-Effort.
 
 Kube Pyramid reads your existing data (Prometheus, kube-state-metrics,
