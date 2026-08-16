@@ -1,13 +1,14 @@
 # Kube Pyramid
 
-**Stop the priority paradox in your Kubernetes cluster.**
+**Identify the .**
 
 Kubernetes gives you two static, absolute knobs for saying *"this workload
 is important"* — the pod's QoS class, and its PriorityClass integer. Both
-are set at deploy time, in isolation, by whoever wrote the YAML. So they all
-end up at the top of the pyramid: Guaranteed, priority 1,000,000, please
-don't evict me. Everyone gold-tier, nobody willing to be preempted, half
-your cluster idle. Kube Pyramid *looks* at your cluster and *tells* you
+are set at deploy time and independently across applications. This means 
+its possible all end up at the top of the pyramid, i.e "please
+don't evict me", meaning your cluster needs more resources and hence costs.
+
+Kube Pyramid *looks* at your cluster and *tells* you
 which workloads have been quietly hoarding priority they don't need — and
 which under-appreciated workloads deserve a promotion. Named for the
 QoS pyramid every k8s cluster forms: Guaranteed at the top, then Burstable,
