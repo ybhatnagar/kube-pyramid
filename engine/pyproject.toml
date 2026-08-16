@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kubepyramid-engine"
+version = "0.1.0"
+description = "Kube Pyramid — core engine (QoS / Priority-Class Recommender) (docs/05, docs/04)"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.24,<2.1",
+    "pandas>=2.0,<2.3",
+    "scikit-learn>=1.3,<1.6",
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+# Postgres is the production backend; SQLite (stdlib) is the dev fallback.
+postgres = ["psycopg[binary]>=3.1"]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[project.scripts]
+kubepyramid-engine = "engine.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["engine*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
