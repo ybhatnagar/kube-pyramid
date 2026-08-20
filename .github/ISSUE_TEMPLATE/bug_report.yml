@@ -1,0 +1,78 @@
+name: Bug report
+description: Report an incorrect recommendation, a crash, or a mismatch with the docs.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a report. If it helps, a
+        `GET /runs/{id}/recommendations` DTO or the run's `data_as_of` is
+        usually enough context to correlate.
+
+  - type: input
+    id: version
+    attributes:
+      label: Kube Pyramid version / commit
+      placeholder: "v0.1.0, or the commit SHA from git rev-parse HEAD"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - engine (Python — analysis / API)
+        - collector (Go — ingestion)
+        - ui
+        - deploy (Helm chart / images)
+        - docs
+        - other / not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A concise description of the bug + what you expected instead.
+      placeholder: |
+        Ran `kubepyramid-engine run --synthetic --k 2` and got X.
+        Expected Y.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: Minimal steps a maintainer can follow.
+      placeholder: |
+        1.
+        2.
+        3.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python/Go versions, Kubernetes distro if applicable, Prometheus source.
+      placeholder: |
+        macOS 14.5
+        Python 3.12
+        kind 0.24 (k8s 1.30)
+        kube-prometheus-stack (Prometheus)
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / DTO snippet
+      description: If the bug is a recommendation issue, paste the relevant `recommendations` / `evidence` JSON.
+      render: json
+    validations:
+      required: false

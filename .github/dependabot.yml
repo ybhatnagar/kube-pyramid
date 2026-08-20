@@ -1,0 +1,53 @@
+version: 2
+
+updates:
+  # ---- Python engine ----
+  - package-ecosystem: pip
+    directory: /engine
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels: [dependencies, python]
+    groups:
+      python-deps:
+        patterns: ["*"]
+
+  # ---- Go collector ----
+  - package-ecosystem: gomod
+    directory: /collector
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels: [dependencies, go]
+    groups:
+      go-deps:
+        patterns: ["*"]
+
+  # ---- Docker base images ----
+  - package-ecosystem: docker
+    directory: /collector
+    schedule: { interval: weekly, day: monday }
+    labels: [dependencies, docker]
+
+  - package-ecosystem: docker
+    directory: /engine
+    schedule: { interval: weekly, day: monday }
+    labels: [dependencies, docker]
+
+  - package-ecosystem: docker
+    directory: /ui
+    schedule: { interval: weekly, day: monday }
+    labels: [dependencies, docker]
+
+  # ---- GitHub Actions themselves ----
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, github-actions]
+    groups:
+      actions-deps:
+        patterns: ["*"]

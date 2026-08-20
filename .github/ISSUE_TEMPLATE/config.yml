@@ -1,0 +1,7 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/ybhatnagar/kube-pyramid/security/advisories/new
+    about: >
+      Please do NOT open a public issue for security-relevant bugs. Open a
+      private security advisory instead. See docs/contributing.md § Security.

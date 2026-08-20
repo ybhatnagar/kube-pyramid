@@ -1,0 +1,59 @@
+name: Feature request
+description: Propose a new capability, a new metric source, a scaling / clustering strategy, or a UX improvement.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Kube Pyramid is deliberately narrow — **read-only advisor** for
+        Kubernetes QoS class and PriorityClass integer recommendations.
+        Anything that mutates the target cluster (auto-apply, GitOps push,
+        admission webhooks, operators) is intentionally out of scope. If
+        you're proposing something in that space, please explain how it can
+        stay read-only.
+
+        The safe-YAML export invariant is load-bearing: the export actively
+        edits **only** the PriorityClass; QoS-class changes are commented
+        guidance next to the workload's unchanged `requests`/`limits`, so
+        `kubectl apply` cannot silently damage a pod. Proposals that make
+        QoS-class changes active in the export need a very strong
+        justification (see `docs/priority-ranking.md#safe-yaml-export`).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What can't you do today that you wish you could?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: |
+        A sketch of the API / UX / algorithm you have in mind. No commitment —
+        we can iterate. If it touches the `/api/v1` DTOs or the DB schema,
+        call that out explicitly.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional — anything you tried or ruled out.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: fit
+    attributes:
+      label: Fit
+      options:
+        - label: This proposal stays read-only (does not mutate the target cluster).
+          required: true
+        - label: This proposal preserves the safe-YAML export invariant (PriorityClass active, QoS-class commented).
+          required: true
+        - label: I've searched existing issues and this isn't a duplicate.
+          required: true
