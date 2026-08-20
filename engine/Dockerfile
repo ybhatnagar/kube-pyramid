@@ -2,14 +2,14 @@
 # Engine + API image — install into a venv on python-slim, then copy the venv to a
 # clean slim runtime. Includes the Postgres driver (the production backend). numpy/
 # scipy/scikit-learn/pandas install from manylinux wheels, so no compiler is needed.
-FROM python:3.12-slim AS build
+FROM python:3.14-slim AS build
 WORKDIR /app
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 COPY pyproject.toml ./
 COPY engine ./engine
 RUN --mount=type=cache,target=/root/.cache/pip python -m venv /venv && /venv/bin/pip install ".[postgres]"
 
-FROM python:3.12-slim
+FROM python:3.14-slim
 ENV PATH=/venv/bin:$PATH PYTHONUNBUFFERED=1 KUBEPYRAMID_DB_DRIVER=postgres
 COPY --from=build /venv /venv
 # Non-root runtime (numeric UID so Kubernetes runAsNonRoot can verify it).
