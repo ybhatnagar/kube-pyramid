@@ -73,7 +73,11 @@ The single join key across everything is `workload_uid`, formatted
 `namespace/Kind/name` — deterministic, human-readable, and stable across a
 discovery-cache refresh.
 
-Detailed schema: [`design-docs/04-schema-and-api.md`](../design-docs/04-schema-and-api.md).
+The authoritative schema lives in the collector's migration files
+([`collector/internal/store/migrations/sqlite/`](../collector/internal/store/migrations/sqlite/)
+and [`.../postgres/`](../collector/internal/store/migrations/postgres/)) — the
+engine and the collector both bind to those. Every column, index, and check
+constraint is there.
 
 ## Module 1 — Collector (Go)
 
@@ -103,7 +107,10 @@ Location: [`collector/`](../collector).
   The engine's `POST /collections` calls it when the UI triggers a run.
 - **Headless**: `collector ingest --all` for cron/one-off use.
 
-Details: [`design-docs/03-collector-design.md`](../design-docs/03-collector-design.md).
+The connector interface + registry live in
+[`collector/internal/connectors/`](../collector/internal/connectors/); the
+step orchestration in [`collector/internal/steps/`](../collector/internal/steps/).
+Adding a new source is the shape of the existing Prometheus connector.
 
 ## Module 2 — Engine + API (Python)
 
@@ -216,6 +223,3 @@ run this specific tool.
 - [**Priority ranking deep dive**](priority-ranking.md) — the algorithm, the
   safe-YAML export model, and where the parameters come from.
 - [**Deployment guide**](deployment.md) — Helm chart, external DB, ingress.
-- **Design docs** in [`design-docs/`](../design-docs/) — the original design
-  discussions this repo was built from (numbered 01–08, plus
-  `build-prompts.md`). Kept as historical context.

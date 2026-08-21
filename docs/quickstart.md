@@ -115,5 +115,5 @@ The API's OpenAPI docs are auto-generated at
 ## Something didn't work?
 
 The engine is deterministic on the synthetic fixture — same seed, same output.
-If you see different numbers or a failure, please [file an issue](../CONTRIBUTING.md#reporting-bugs)
+If you see different numbers or a failure, please [file an issue](contributing.md#reporting-bugs)
 with the command you ran and the output, and we'll take a look.

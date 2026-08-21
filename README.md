@@ -155,9 +155,6 @@ Full guide (external DB, ingress, kind/minikube demo, RBAC): [**docs/deployment.
 - [**Contributing**](docs/contributing.md) — how to run tests, layout a
   change, and the contracts you must not break.
 
-Original design discussions the repo was built from: [`design-docs/`](design-docs/)
-(numbered 01–08).
-
 <details>
 <summary><b>REST API — quick reference</b></summary>
 
