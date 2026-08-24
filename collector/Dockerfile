@@ -1,7 +1,7 @@
 # Collector image — multi-stage: build a static Go binary, ship on distroless.
 # The pure-Go SQLite/pgx drivers mean CGO_ENABLED=0 → a fully static binary that
 # runs on the tiny distroless/static base (no libc, non-root).
-FROM golang:1.25-alpine AS build
+FROM golang:1.27-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
